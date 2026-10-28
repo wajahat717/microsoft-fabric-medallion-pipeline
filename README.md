@@ -85,6 +85,25 @@ Load table ──► Run DQ tests ──► (next tables …) ──► DQ check
 | `03_organization_and_region` | Organizations mapped to regions through a GL location tree (tree versions, tree nodes, value sets, mapping sets) and a flattened `location_hierarchy` |
 | `04_cost_fact_tables` | Two large fact tables: `expenditure_item` (about 4 million rows) and `cost_distribution`, with derived columns |
 | `05_validation` | Month-by-month reconciliation of Bronze vs Silver (row counts and amounts), and a sample query for manual spot checks |
+| `06_gold_layer` | Star schema for Power BI: `dim_date`, `dim_organization` (with region), `dim_expenditure_type`, `dim_transaction_source`, `dim_project_role`, and `fact_project_cost`, plus Gold checks |
+
+## Gold layer (star schema)
+
+```
+            dim_date
+               │
+dim_organization ─┼─ dim_expenditure_type
+               │
+       fact_project_cost  (one row per cost distribution line)
+               │
+  dim_transaction_source · dim_project_role
+```
+
+- Every dimension has an **Unknown (-1)** row, so no cost disappears when a reference is missing.
+- `dim_date` is generated in T-SQL without recursion (Fabric Warehouse does not support recursive CTEs).
+- `04_gold_checks.sql` proves Gold cost = Silver cost, the fact grain is unique, and every fact key finds its dimension.
+
+The Power BI report built on this model is in my [Power BI repo](https://github.com/wajahat717/power-bi-dashboard-troubleshooting/tree/main/project-cost-dashboard).
 
 Inside each table folder, run the files in number order:
 
