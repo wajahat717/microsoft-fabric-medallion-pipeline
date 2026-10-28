@@ -1,0 +1,583 @@
+{
+  "name": "pl_daily_medallion_load",
+  "properties": {
+    "description": "Daily Bronze -> Silver -> Gold load with DQ gate, logging and retries.",
+    "activities": [
+      {
+        "name": "Log start",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 120,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedService": {
+          "name": "practice_warehouse",
+          "properties": {
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "<warehouse-sql-endpoint>",
+              "artifactId": "<warehouse-id>",
+              "workspaceId": "<workspace-id>"
+            }
+          }
+        },
+        "typeProperties": {
+          "storedProcedureName": "ops.log_step",
+          "storedProcedureParameters": {
+            "run_id": {
+              "value": "@pipeline().RunId",
+              "type": "String"
+            },
+            "pipeline_name": {
+              "value": "@pipeline().Pipeline",
+              "type": "String"
+            },
+            "step_name": {
+              "value": "pipeline",
+              "type": "String"
+            },
+            "status": {
+              "value": "Started",
+              "type": "String"
+            }
+          }
+        }
+      },
+      {
+        "name": "Load reference tables",
+        "type": "ForEach",
+        "dependsOn": [
+          {
+            "activity": "Log start",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "items": {
+            "value": "@pipeline().parameters.reference_tables",
+            "type": "Expression"
+          },
+          "isSequential": false,
+          "batchCount": 4,
+          "activities": [
+            {
+              "name": "Load one table",
+              "type": "Script",
+              "dependsOn": [],
+              "policy": {
+                "timeout": "0.02:00:00",
+                "retry": 1,
+                "retryIntervalInSeconds": 120,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "linkedService": {
+                "name": "practice_warehouse",
+                "properties": {
+                  "type": "DataWarehouse",
+                  "typeProperties": {
+                    "endpoint": "<warehouse-sql-endpoint>",
+                    "artifactId": "<warehouse-id>",
+                    "workspaceId": "<workspace-id>"
+                  }
+                }
+              },
+              "typeProperties": {
+                "scripts": [
+                  {
+                    "type": "NonQuery",
+                    "text": {
+                      "value": "@concat('EXEC silver.load_', item(), ' @run_id = ''', pipeline().RunId, '''; EXEC silver.dq_', item(), ' @run_id = ''', pipeline().RunId, ''';')",
+                      "type": "Expression"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Load organization and region",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Load reference tables",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 120,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedService": {
+          "name": "practice_warehouse",
+          "properties": {
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "<warehouse-sql-endpoint>",
+              "artifactId": "<warehouse-id>",
+              "workspaceId": "<workspace-id>"
+            }
+          }
+        },
+        "typeProperties": {
+          "storedProcedureName": "silver.load_organization",
+          "storedProcedureParameters": {
+            "run_id": {
+              "value": "@pipeline().RunId",
+              "type": "String"
+            }
+          }
+        }
+      },
+      {
+        "name": "Load expenditure items",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Load organization and region",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 120,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedService": {
+          "name": "practice_warehouse",
+          "properties": {
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "<warehouse-sql-endpoint>",
+              "artifactId": "<warehouse-id>",
+              "workspaceId": "<workspace-id>"
+            }
+          }
+        },
+        "typeProperties": {
+          "storedProcedureName": "silver.load_expenditure_item",
+          "storedProcedureParameters": {
+            "run_id": {
+              "value": "@pipeline().RunId",
+              "type": "String"
+            }
+          }
+        }
+      },
+      {
+        "name": "Load cost distribution (incremental)",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Load expenditure items",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 120,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedService": {
+          "name": "practice_warehouse",
+          "properties": {
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "<warehouse-sql-endpoint>",
+              "artifactId": "<warehouse-id>",
+              "workspaceId": "<workspace-id>"
+            }
+          }
+        },
+        "typeProperties": {
+          "storedProcedureName": "silver.load_cost_distribution_incremental",
+          "storedProcedureParameters": {
+            "run_id": {
+              "value": "@pipeline().RunId",
+              "type": "String"
+            }
+          }
+        }
+      },
+      {
+        "name": "DQ cost tables",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Load cost distribution (incremental)",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 120,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedService": {
+          "name": "practice_warehouse",
+          "properties": {
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "<warehouse-sql-endpoint>",
+              "artifactId": "<warehouse-id>",
+              "workspaceId": "<workspace-id>"
+            }
+          }
+        },
+        "typeProperties": {
+          "storedProcedureName": "silver.dq_cost_distribution",
+          "storedProcedureParameters": {
+            "run_id": {
+              "value": "@pipeline().RunId",
+              "type": "String"
+            }
+          }
+        }
+      },
+      {
+        "name": "DQ check",
+        "type": "Lookup",
+        "dependsOn": [
+          {
+            "activity": "DQ cost tables",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 120,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedService": {
+          "name": "practice_warehouse",
+          "properties": {
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "<warehouse-sql-endpoint>",
+              "artifactId": "<warehouse-id>",
+              "workspaceId": "<workspace-id>"
+            }
+          }
+        },
+        "typeProperties": {
+          "source": {
+            "type": "DataWarehouseSource",
+            "sqlReaderQuery": {
+              "value": "@concat('SELECT COUNT(*) AS error_count FROM ops.dq_result WHERE severity = ''ERROR'' AND failed_rows > 0 AND run_id = ''', pipeline().RunId, '''')",
+              "type": "Expression"
+            }
+          },
+          "firstRowOnly": true
+        }
+      },
+      {
+        "name": "Errors found?",
+        "type": "IfCondition",
+        "dependsOn": [
+          {
+            "activity": "DQ check",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "expression": {
+            "value": "@greater(activity('DQ check').output.firstRow.error_count, 0)",
+            "type": "Expression"
+          },
+          "ifTrueActivities": [
+            {
+              "name": "Log DQ failure",
+              "type": "SqlServerStoredProcedure",
+              "dependsOn": [],
+              "policy": {
+                "timeout": "0.02:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 120,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "linkedService": {
+                "name": "practice_warehouse",
+                "properties": {
+                  "type": "DataWarehouse",
+                  "typeProperties": {
+                    "endpoint": "<warehouse-sql-endpoint>",
+                    "artifactId": "<warehouse-id>",
+                    "workspaceId": "<workspace-id>"
+                  }
+                }
+              },
+              "typeProperties": {
+                "storedProcedureName": "ops.log_step",
+                "storedProcedureParameters": {
+                  "run_id": {
+                    "value": "@pipeline().RunId",
+                    "type": "String"
+                  },
+                  "pipeline_name": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "String"
+                  },
+                  "step_name": {
+                    "value": "dq gate",
+                    "type": "String"
+                  },
+                  "status": {
+                    "value": "Failed",
+                    "type": "String"
+                  }
+                }
+              }
+            },
+            {
+              "name": "DQ gate failed",
+              "type": "Fail",
+              "dependsOn": [
+                {
+                  "activity": "Log DQ failure",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "typeProperties": {
+                "message": {
+                  "value": "@concat('DQ gate failed for run ', pipeline().RunId)",
+                  "type": "Expression"
+                },
+                "errorCode": "DQ_GATE_FAILED"
+              }
+            }
+          ],
+          "ifFalseActivities": [
+            {
+              "name": "Refresh Gold tables",
+              "type": "SqlServerStoredProcedure",
+              "dependsOn": [],
+              "policy": {
+                "timeout": "0.02:00:00",
+                "retry": 1,
+                "retryIntervalInSeconds": 120,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "linkedService": {
+                "name": "practice_warehouse",
+                "properties": {
+                  "type": "DataWarehouse",
+                  "typeProperties": {
+                    "endpoint": "<warehouse-sql-endpoint>",
+                    "artifactId": "<warehouse-id>",
+                    "workspaceId": "<workspace-id>"
+                  }
+                }
+              },
+              "typeProperties": {
+                "storedProcedureName": "gold.refresh_gold_tables",
+                "storedProcedureParameters": {
+                  "run_id": {
+                    "value": "@pipeline().RunId",
+                    "type": "String"
+                  }
+                }
+              }
+            },
+            {
+              "name": "Update organization history",
+              "type": "SqlServerStoredProcedure",
+              "dependsOn": [
+                {
+                  "activity": "Refresh Gold tables",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.02:00:00",
+                "retry": 1,
+                "retryIntervalInSeconds": 120,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "linkedService": {
+                "name": "practice_warehouse",
+                "properties": {
+                  "type": "DataWarehouse",
+                  "typeProperties": {
+                    "endpoint": "<warehouse-sql-endpoint>",
+                    "artifactId": "<warehouse-id>",
+                    "workspaceId": "<workspace-id>"
+                  }
+                }
+              },
+              "typeProperties": {
+                "storedProcedureName": "gold.load_dim_organization_history",
+                "storedProcedureParameters": {
+                  "run_id": {
+                    "value": "@pipeline().RunId",
+                    "type": "String"
+                  }
+                }
+              }
+            },
+            {
+              "name": "Log success",
+              "type": "SqlServerStoredProcedure",
+              "dependsOn": [
+                {
+                  "activity": "Update organization history",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.02:00:00",
+                "retry": 0,
+                "retryIntervalInSeconds": 120,
+                "secureOutput": false,
+                "secureInput": false
+              },
+              "linkedService": {
+                "name": "practice_warehouse",
+                "properties": {
+                  "type": "DataWarehouse",
+                  "typeProperties": {
+                    "endpoint": "<warehouse-sql-endpoint>",
+                    "artifactId": "<warehouse-id>",
+                    "workspaceId": "<workspace-id>"
+                  }
+                }
+              },
+              "typeProperties": {
+                "storedProcedureName": "ops.log_step",
+                "storedProcedureParameters": {
+                  "run_id": {
+                    "value": "@pipeline().RunId",
+                    "type": "String"
+                  },
+                  "pipeline_name": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "String"
+                  },
+                  "step_name": {
+                    "value": "pipeline",
+                    "type": "String"
+                  },
+                  "status": {
+                    "value": "Succeeded",
+                    "type": "String"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Log load failure",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          {
+            "activity": "Load cost distribution (incremental)",
+            "dependencyConditions": [
+              "Failed"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.02:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 120,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedService": {
+          "name": "practice_warehouse",
+          "properties": {
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "<warehouse-sql-endpoint>",
+              "artifactId": "<warehouse-id>",
+              "workspaceId": "<workspace-id>"
+            }
+          }
+        },
+        "typeProperties": {
+          "storedProcedureName": "ops.log_step",
+          "storedProcedureParameters": {
+            "run_id": {
+              "value": "@pipeline().RunId",
+              "type": "String"
+            },
+            "pipeline_name": {
+              "value": "@pipeline().Pipeline",
+              "type": "String"
+            },
+            "step_name": {
+              "value": "cost load",
+              "type": "String"
+            },
+            "status": {
+              "value": "Failed",
+              "type": "String"
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "reference_tables": {
+        "type": "array",
+        "defaultValue": [
+          "supplier",
+          "supplier_site",
+          "party",
+          "party_site",
+          "item",
+          "lookup_value",
+          "expenditure_category",
+          "transaction_source",
+          "transaction_doc_entry",
+          "project_role"
+        ]
+      }
+    },
+    "annotations": [
+      "medallion",
+      "dq-gate"
+    ]
+  }
+}

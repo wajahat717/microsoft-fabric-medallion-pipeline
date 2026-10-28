@@ -103,6 +103,10 @@ dim_organization ─┼─ dim_expenditure_type
 - `dim_date` is generated in T-SQL without recursion (Fabric Warehouse does not support recursive CTEs).
 - `04_gold_checks.sql` proves Gold cost = Silver cost, the fact grain is unique, and every fact key finds its dimension.
 
+## Next phase → [`07_extensions/`](07_extensions/)
+
+Production features designed and written for the next phase (not yet run in production): **incremental loading** with watermarks, **SCD Type 2** history, **monitoring** (run log, DQ trend, freshness), **Gold tables for Direct Lake**, **PySpark notebooks** with Delta MERGE, the full **pipeline JSON**, and a **CI/CD** plan (Git + Dev → Test → Prod).
+
 The Power BI report built on this model is in my [Power BI repo](https://github.com/wajahat717/power-bi-dashboard-troubleshooting/tree/main/project-cost-dashboard).
 
 Inside each table folder, run the files in number order:
@@ -127,6 +131,6 @@ Each folder also has `00_check_bronze_column_names.sql`, which checks that every
 
 ## Tools
 
-Microsoft Fabric (Lakehouse, Warehouse, Data Pipelines) · T-SQL · Oracle Fusion Cloud (PPM, Procurement, TCA, HCM, Subledger Accounting)
+Microsoft Fabric (Lakehouse, Warehouse, Data Pipelines, Notebooks, Deployment pipelines) · T-SQL · PySpark · Delta Lake · Git · Oracle Fusion Cloud (PPM, Procurement, TCA, HCM, Subledger Accounting)
 
 > All names, IDs and connection details are generic. No client data is included.
