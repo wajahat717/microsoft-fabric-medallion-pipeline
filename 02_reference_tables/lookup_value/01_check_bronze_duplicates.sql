@@ -1,0 +1,4 @@
+SELECT COUNT(*) AS total_rows,
+       COUNT(*) - (SELECT COUNT(*) FROM (SELECT DISTINCT b.LookupType, b.LookupCode, b.SetId, b.ViewApplicationId FROM [bronze_lakehouse].[bronze].[br_oracle_fusion_fscm_finextractam_analyticsextractserviceam_lookupvaluestl] b WHERE b.Language = 'US' AND b.LookupType = 'PJF_REVENUE_CATEGORY') d) AS duplicate_keys,
+       (SELECT COUNT(*) FROM (SELECT DISTINCT b.LookupType, b.LookupCode, b.SetId, b.ViewApplicationId FROM [bronze_lakehouse].[bronze].[br_oracle_fusion_fscm_finextractam_analyticsextractserviceam_lookupvaluestl] b WHERE b.Language = 'US' AND b.LookupType = 'PJF_REVENUE_CATEGORY') d) AS unique_keys
+FROM [bronze_lakehouse].[bronze].[br_oracle_fusion_fscm_finextractam_analyticsextractserviceam_lookupvaluestl] b WHERE b.Language = 'US' AND b.LookupType = 'PJF_REVENUE_CATEGORY';
